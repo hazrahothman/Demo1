@@ -1,72 +1,151 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>This is my new website</title>
+  <meta charset="UTF-8"/>
+  <title>HTML5 Doctor Appointment Scheduling (JavaScript/PHP)</title>
+
+  <link type="text/css" rel="stylesheet" href="css/layout.css"/>
+
+  <!-- DayPilot library -->
+  <script src="js/daypilot/daypilot-all.min.js"></script>
+
 </head>
 <body>
+<?php require_once '_header.php'; ?>
 
-<h1>My name is Hazrah Othman</h1>
-<h1 style="background-color:DodgerBlue;">Hello New Website</h1>
-<p style="background-color:Yellow;">Lorem ipsum...</p>
-<p>give me Idea.</p>
- <form>
-.
-form elements
-.
-</form>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  
-  <meta charset='utf-8'>
-  <meta name="viewport" content="width=device-width, initial-scale=1" id="wixDesktopViewport" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <base href="https://hothman6.wixsite.com/demo-1/">
-  <meta name="generator" content="Wix.com Website Builder"/>
+<div class="main">
+  <?php require_once '_navigation.php'; ?>
 
-  <link rel="icon" sizes="192x192" href="https://www.wix.com/favicon.ico">
-  <link rel="shortcut icon" href="https://www.wix.com/favicon.ico" type="image/x-icon"/>
-  <link rel="apple-touch-icon" href="https://www.wix.com/favicon.ico" type="image/x-icon"/>
-  <!-- Safari Pinned Tab Icon -->
-  <!-- <link rel="mask-icon" href="https://www.wix.com/favicon.ico"> -->
+  <div>
 
-  <!-- Legacy Polyfills -->
-  <script src="https://static.parastorage.com/unpkg/core-js-bundle@3.2.1/minified.js" nomodule=""></script>
-  <script src="https://static.parastorage.com/unpkg/focus-within-polyfill@5.0.9/dist/focus-within-polyfill.js" nomodule=""></script>
-  <script src="https://polyfill.io/v3/polyfill.min.js?features=fetch" nomodule=""></script>
+    <div class="column-left">
+      <div id="nav"></div>
+    </div>
+    <div class="column-main">
+      <div class="toolbar">Available time slots:</div>
+      <div id="calendar"></div>
+    </div>
 
-  <!-- lodash window -->
-  <script>
-    (function () {
-      var resolve
-      window.lodashPromise = new Promise(function (_resolve) { resolve = _resolve })
-      window.__onLodashLoaded = function () {
-        resolve()
-      }
-    })()
-  </script>
+  </div>
+</div>
 
-  <!-- Performance API Polyfills -->
-  <script>
-  (function () {
-    var noop = function noop() {};
-    if ("performance" in window === false) {
-      window.performance = {};
+<script src="js/daypilot/daypilot-all.min.js"></script>
+
+<script>
+  var nav = new DayPilot.Navigator("nav");
+  nav.selectMode = "week";
+  nav.showMonths = 3;
+  nav.skipMonths = 3;
+  nav.onTimeRangeSelected = function (args) {
+    loadEvents(args.start.firstDayOfWeek(DayPilot.Locale.find(nav.locale).weekStarts), args.start.addDays(7));
+  };
+  nav.init();
+
+  var calendar = new DayPilot.Calendar("calendar");
+  calendar.viewType = "Week";
+  calendar.timeRangeSelectedHandling = "Disabled";
+  calendar.eventMoveHandling = "Disabled";
+  calendar.eventResizeHandling = "Disabled";
+  calendar.eventArrangement = "SideBySide";
+  calendar.onBeforeEventRender = function (args) {
+    if (!args.data.tags) {
+      return;
     }
-    window.performance.mark = performance.mark || noop;
-    window.performance.measure = performance.measure || noop;
-    if ("now" in window.performance === false) {
-      var nowOffset = Date.now();
-      if (performance.timing && performance.timing.navigationStart) {
-        nowOffset = performance.timing.navigationStart;
-      }
-      window.performance.now = function now() {
-        return Date.now() - nowOffset;
-      };
+    switch (args.data.tags.status) {
+      case "free":
+        args.data.backColor = "#3d85c6";  // blue
+        args.data.barHidden = true;
+        args.data.borderColor = "darker";
+        args.data.fontColor = "white";
+        args.data.html = "Available<br/>" + args.data.tags.doctor;
+        args.data.toolTip = "Click to request this time slot";
+        break;
+      case "waiting":
+        args.data.backColor = "#e69138";  // orange
+        args.data.barHidden = true;
+        args.data.borderColor = "darker";
+        args.data.fontColor = "white";
+        args.data.html = "Your appointment, waiting for confirmation";
+        break;
+      case "confirmed":
+        args.data.backColor = "#6aa84f";  // green
+        args.data.barHidden = true;
+        args.data.borderColor = "darker";
+        args.data.fontColor = "white";
+        args.data.html = "Your appointment, confirmed";
+        break;
     }
-  })();
-  </script>
+  };
+  calendar.onEventClick = function (args) {
+    if (args.e.tag("status") !== "free") {
+      calendar.message("You can only request a new appointment in a free slot.");
+      return;
+    }
 
+    var form = [
+      {name: "Request an Appointment"},
+      {name: "From", id: "start", dateFormat: "MMMM d, yyyy h:mm tt", disabled: true},
+      {name: "To", id: "end", dateFormat: "MMMM d, yyyy h:mm tt", disabled: true},
+      {name: "Name", id: "name"},
+    ];
+
+    var data = {
+      id: args.e.id(),
+      start: args.e.start(),
+      end: args.e.end(),
+    };
+
+    var options = {
+      focus: "name"
+    };
+
+    DayPilot.Modal.form(form, data, options).then(function(modal) {
+        if (modal.canceled) {
+          return;
+        }
+
+        DayPilot.Http.ajax({
+          url: "backend_request_save.php",
+          data: modal.result,
+          success: function(ajax) {
+            args.e.data.tags.status = "waiting";
+            calendar.events.update(args.e.data);
+          }
+        })
+    });
+
+  };
+  calendar.init();
+
+  loadEvents();
+
+  function loadEvents(day) {
+    var start = nav.visibleStart() > new DayPilot.Date() ? nav.visibleStart() : new DayPilot.Date();
+
+    var params = {
+      start: start.toString(),
+      end: nav.visibleEnd().toString()
+    };
+
+    DayPilot.Http.ajax({
+      url: "backend_events_free.php",
+      data: params,
+      success: function(ajax) {
+        var data = ajax.data;
+
+        if (day) {
+          calendar.startDate = day;
+        }
+        calendar.events.list = data;
+        calendar.update();
+
+        nav.events.list = data;
+        nav.update();
+
+      }
+    });
+  }
+</script>
 
 </body>
 </html>
